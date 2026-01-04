@@ -1,158 +1,158 @@
-# Residual‑Blowout Filter for Macro Trading (White Letter)
+# Residual-Blowout Filter for Macro Trading
 
-**Goal:** detect when a rolling macro regression **breaks down** (regime shift), so a macro strategy can **pause new trades** until relationships stabilise.
+This document summarises my *Residual-Blowout Filter for Macro Trading* white letter.
 
----
+The objective is to **detect regime failure in rolling macro models** and temporarily **pause trading** when model relationships break down.
 
-## Executive summary
-
-A rolling EUR/USD macro regression can look stable, then fail abruptly during regime shifts.  
-The **Residual‑Blowout Filter** monitors *out‑of‑sample residuals* and quantifies:
-
-1) **Magnitude** of errors (RMS of residuals)  
-2) **Frequency** of “large” residual events  
-
-Both are normalised via z‑scores and combined into a **composite instability score**.  
-When the score exceeds calibrated thresholds, the desk enters a **risk‑off / pause** state for new macro trades.
+> This filter is **not a signal generator**.  
+> It is a **model-robustness and regime-failure detector**.
 
 ---
 
-## 1) Model definition (rolling regression)
+## 1. Purpose
 
-Estimated on a rolling window:
+Macro regressions can appear stable for long periods and then fail abruptly during regime changes.
+
+This filter monitors **out-of-sample residual behaviour** and triggers a *risk-off / pause* state when model errors become abnormally large or frequent.
+
+---
+
+## 2. Base Model (Rolling Regression)
+
+The macro model is estimated on a rolling window:
 
 $$
-r^{EUR/USD}_t
-= \beta_0 + \beta_1\,DXY_t + \beta_2\,r^{SP500}_t + \beta_3\,VIX_t
-+ \beta_4\,(i^{EU}_t - i^{US}_t) + \varepsilon_t
+r^{EURUSD}_t
+=
+\beta_0
++ \beta_1 DXY_t
++ \beta_2 r^{SP500}_t
++ \beta_3 VIX_t
++ \beta_4 \left(i^{EU}_t - i^{US}_t\right)
++ \varepsilon_t
 $$
 
-Residual (one‑step / out‑of‑sample):
+where:
+
+- $r^{EURUSD}_t$ = EUR/USD return  
+- $DXY_t$ = USD strength  
+- $r^{SP500}_t$ = global risk sentiment  
+- $VIX_t$ = volatility stress  
+- $(i^{EU}_t - i^{US}_t)$ = rate differential  
+
+---
+
+## 3. Residual Definition
+
+The model residual is defined as:
 
 $$
 \hat{\varepsilon}_t = r_t - \hat{r}_t
 $$
 
-You monitor \(\hat{\varepsilon}_t\) specifically to detect when the model stops describing reality.
+We monitor $\hat{\varepsilon}_t$ for signs that the model has stopped describing market reality.
 
 ---
 
-## 2) Filter construction
+## 4. Filter Construction
 
-### Step A — Run the rolling regression regularly
-At your chosen frequency (e.g., **hourly** or **daily**), store the one‑step residual \(\hat{\varepsilon}_t\).
+The filter combines **error magnitude** and **error frequency**.
 
-### Step B — Magnitude: rolling RMS of residuals
+---
 
-$$
-RMS_t =
-\sqrt{\frac{1}{W}
-\sum_{i=t-W+1}^{t} \hat{\varepsilon}_i^2}
-$$
+### Step B — Magnitude: Rolling RMS of Residuals
 
-### Step C — Frequency: fraction of “large residual” events
-
-Let \(\sigma_\varepsilon\) be a residual scale estimated on a calibration period.  
-Define:
+Compute the rolling RMS over a window $W$:
 
 $$
-F_t =
+RMS_t
+=
+\sqrt{
+\frac{1}{W}
+\sum_{i=t-W+1}^{t}
+\hat{\varepsilon}_i^2
+}
+$$
+
+This captures **how large** model errors have become.
+
+---
+
+### Step C — Frequency: Large Residual Events
+
+Define a residual scale $\sigma_\varepsilon$ estimated over a calibration period.
+
+Define the fraction of large residuals:
+
+$$
+F_t
+=
 \frac{1}{W_f}
-\sum \mathbf{1} \Big(|\hat{\varepsilon}_i| > k\,\sigma_\varepsilon\Big)
+\sum
+\mathbf{1}
+\left(
+\lvert \hat{\varepsilon}_i \rvert
+>
+k \, \sigma_\varepsilon
+\right)
 $$
 
-### Step D — Normalise (z‑scores)
-Convert \(RMS_t\) and \(F_t\) into z‑scores using a calibration mean and std.
+This captures **how often** extreme errors occur.
 
-### Step E — Composite instability score
+---
+
+### Step D — Normalisation (Z-Scores)
+
+Convert $RMS_t$ and $F_t$ into z-scores using calibration means and standard deviations:
 
 $$
-S_t = \alpha\,z^{RMS}_t + (1-\alpha)\,z^{FREQ}_t
+Z^{RMS}_t = \frac{RMS_t - \mu_{RMS}}{\sigma_{RMS}},
+\quad
+Z^{F}_t = \frac{F_t - \mu_F}{\sigma_F}
 $$
 
 ---
 
-## 3) Decision rules and thresholds
+## 5. Composite Regime-Failure Score
 
-Two practical trigger policies:
-
-### OR rule (simple)
-Pause if:
+Combine magnitude and frequency:
 
 $$
-z^{RMS}_t > z_{thresh} \;\; \text{OR} \;\; F_t > f_{thresh}
+S_t = Z^{RMS}_t + Z^{F}_t
 $$
-
-### Composite rule (single score)
-Pause if:
-
-$$
-S_t > s_{thresh}
-$$
-
-**Suggested start values:**
-
-- \(z_{thresh} = 2.75\)  
-- \(f_{thresh} = 0.12\)  
-- \(s_{thresh} = 2.25\)
-
-Calibration balances false alarms vs missed breaks.
 
 ---
 
-## 4) Timescale & coefficient stability (how to adapt)
+## 6. Trading Logic
 
-Practical question: *are coefficients stable long enough to estimate/use?*  
-A simple method:
+- If $S_t$ exceeds a calibrated threshold:
+  - **Pause macro trading**
+- Resume trading only once $S_t$ normalises
 
-1) Start with an estimation timescale aligned to execution (daily/hourly).  
-2) Monitor coefficient stability (rolling parameter plots or rolling t‑stats).  
-3) If unstable, shorten the window progressively until parameters settle (trade‑off: noise vs slow adaptation).
-
----
-
-## 5) Simulated example (diagnostics + charts)
-
-The white letter includes a simulated regime‑shift example showing the filter triggering during instability.
-
-### Charts (from the white letter)
-**Figure 1 — residuals, RMS/z_RMS, and composite score (threshold shown):**
-
-![Residuals + RMS + composite score](../assets/whiteletter_fig1.png)
-
-**Figure 2 — zoomed view around the regime start:**
-
-![Zoomed residuals + z_RMS + composite score](../assets/whiteletter_fig2.png)
-
-### Example configuration used in diagnostics
-
-- Regression window: \(W_{reg} = 300\)  
-- RMS window: \(W_{rms} = 80\)  
-- Frequency window: \(W_{freq} = 80\)  
-- Large residual threshold: \(k = 2.0\)  
-- Composite weight: \(\alpha = 0.75\)  
-- Thresholds: \(z_{thresh}=2.75\), \(f_{thresh}=0.12\), \(s_{thresh}=2.25\)
-
-### Trigger statistics (active sample)
-
-- Active points: **900**  
-- OR triggers: **377** (**41.89%**)  
-- OR trigger episodes: **1**, avg length **377.0**  
-- Composite triggers: **381** (**42.33%**)  
-- Composite episodes: **2**, avg length **190.5**  
-- Max |residual| observed: **2.978**
+This avoids deploying macro strategies during **structural regime breaks**.
 
 ---
 
-## 6) Implementation notes & limitations
+## 7. Interpretation
 
-- Estimation frequency should match execution frequency (hourly/daily).  
-- Shorter windows → faster detection but more false positives; longer windows → smoother but slower.  
-- Use robust measures if residuals are heavy‑tailed (e.g., MAD).  
-- When triggered, prefer **halting new trades** or **reducing size** rather than forced liquidation.
+- High $Z^{RMS}_t$ → model errors are large  
+- High $Z^{F}_t$ → model errors are frequent  
+- High $S_t$ → **macro relationships unstable**
 
 ---
 
-## How to discuss this in interviews (short)
+## 8. Limitations
 
-> “It’s a regime‑failure detector on a rolling macro regression. I monitor out‑of‑sample residuals, track error magnitude (RMS) and error frequency (tail events), normalise into z‑scores, combine into a single instability score, and gate macro risk when the score breaches calibrated thresholds. I also have a practical procedure for choosing estimation frequency based on coefficient stability.”
+- Filter is diagnostic, not predictive  
+- Requires stable calibration periods  
+- Extreme structural breaks may require model redesign
+
+---
+
+## 9. Use Case
+
+This framework is suitable for:
+
+- Macro funds
+- Systematic FX strategies
+- Risk overlays for discretionary trading
