@@ -1,0 +1,22 @@
+site_name: Trading Research Portfolio — Harry Larkin
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - toc.integrate
+
+markdown_extensions:
+  - admonition
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.superfences
+  - pymdownx.details
+
+extra_javascript:
+  - javascripts/mathjax.js
+  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
+
+nav:
+  - Home: index.md
+  - White Letter:
+      - Residual-Blowout Filter: projects/residual-blowout-filter.md
