@@ -46,6 +46,7 @@ A regime-failure detector for rolling macro regressions: it monitors **out-of-sa
 ## Contact
 
 If you’d like to discuss the work or see additional notebooks/results, contact me via:
+
 - **Email:** harry@larkin.me.uk
 - **LinkedIn:** https://www.linkedin.com/in/harry-larkin/
 
